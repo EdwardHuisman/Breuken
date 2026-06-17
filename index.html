@@ -1,598 +1,185 @@
-const [studentName, setStudentName] = useState("");
-const [started, setStarted] = useState(false);
-
-
-
-import React, { useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { CheckCircle2, CircleHelp, RefreshCcw, Shuffle, Star } from "lucide-react";
-
-function gcd(a, b) {
-  let x = Math.abs(a);
-  let y = Math.abs(b);
-  while (y !== 0) {
-    const temp = y;
-    y = x % y;
-    x = temp;
-  }
-  return x || 1;
-}
-
-function simplifyFraction(numerator, denominator) {
-  const safeDenominator = denominator || 1;
-  const divisor = gcd(numerator, safeDenominator);
-  return {
-    numerator: numerator / divisor,
-    denominator: safeDenominator / divisor,
-    label: `${numerator}/${safeDenominator}`,
-    simplifiedLabel: `${numerator / divisor}/${safeDenominator / divisor}`,
-    isEquivalent: divisor > 1,
-  };
-}
-
-function parseFractionLabel(label) {
-  const [numerator, denominator] = String(label)
-    .split("/")
-    .map((value) => Number(value.trim()));
-
-  return simplifyFraction(numerator, denominator);
-}
-
-function fractionToPercentage(numerator, denominator) {
-  const safeDenominator = denominator || 1;
-  const percentage = (numerator / safeDenominator) * 100;
-  const rounded = Number(percentage.toFixed(1));
-  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded}%`;
-}
-
-const baseFractions = Array.from({ length: 10 }, (_, i) => {
-  const denominator = i + 1;
-  return {
-    denominator,
-    label: `1/${denominator}`,
-  };
-});
-
-const allFractions = Array.from({ length: 10 }, (_, denominatorIndex) => {
-  const denominator = denominatorIndex + 1;
-  return Array.from({ length: denominator }, (_, numeratorIndex) => {
-    const numerator = numeratorIndex + 1;
-    const simplified = simplifyFraction(numerator, denominator);
-    return {
-      numerator,
-      denominator,
-      label: `${numerator}/${denominator}`,
-      simplifiedLabel: simplified.simplifiedLabel,
-      isEquivalent: simplified.isEquivalent,
-    };
-  });
-}).flat();
-
-function explanationForFraction(fraction) {
-  if (fraction.numerator === fraction.denominator) {
-    return `${fraction.label} is één hele.`;
-  }
-
-  if (fraction.isEquivalent) {
-    return `${fraction.label} betekent ${fraction.numerator} van de ${fraction.denominator} stukjes. Deze breuk is hetzelfde als ${fraction.simplifiedLabel}.`;
-  }
-
-  return `${fraction.label} betekent ${fraction.numerator} van de ${fraction.denominator} gelijke stukjes.`;
-}
-
-function shuffle(array) {
-  return [...array].sort(() => Math.random() - 0.5);
-}
-
-function randomFraction() {
-  return allFractions[Math.floor(Math.random() * allFractions.length)];
-}
-
-function randomQuestion() {
-  const fraction = randomFraction();
-  const correct = fraction.label;
-  const equivalent = fraction.simplifiedLabel;
-
-  const distractors = shuffle(
-    allFractions
-      .filter((item) => item.label !== correct && item.simplifiedLabel !== equivalent)
-      .map((item) => item.label)
-  ).slice(0, 3);
-
-  return {
-    ...fraction,
-    correct,
-    equivalent,
-    choices: shuffle([correct, ...distractors]),
-  };
-}
-
-function FractionBar({ denominator, numerator = 1 }) {
-  return (
-    <div className="w-full flex gap-1">
-      {Array.from({ length: denominator }, (_, i) => (
-        <div
-          key={i}
-          className={`h-10 flex-1 rounded-lg border border-slate-300 ${
-            i < numerator ? "bg-sky-500" : "bg-slate-100"
-          }`}
-        />
-      ))}
-    </div>
-  );
-}
-
-function FractionCircles({ denominator, numerator = 1 }) {
-  const columns = Math.min(denominator, 5);
-
-  return (
-    <div
-      className="gap-2 w-full max-w-md"
-      style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-    >
-      {Array.from({ length: denominator }, (_, i) => (
-        <div
-          key={i}
-          className={`aspect-square rounded-full border-2 border-slate-300 ${
-            i < numerator ? "bg-emerald-400" : "bg-white"
-          }`}
-        />
-      ))}
-    </div>
-  );
-}
-
-function PizzaVisual({ denominator, numerator = 1 }) {
-  const angle = 360 / denominator;
-  const segments = Array.from({ length: denominator }, (_, i) => {
-    const start = i * angle;
-    const end = start + angle;
-    const filled = i < numerator;
-    return { start, end, filled };
-  });
-
-  const polarToCartesian = (cx, cy, r, angleInDegrees) => {
-    const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
-    return {
-      x: cx + r * Math.cos(angleInRadians),
-      y: cy + r * Math.sin(angleInRadians),
-    };
-  };
-
-  const describeArc = (x, y, radius, startAngle, endAngle) => {
-    const start = polarToCartesian(x, y, radius, endAngle);
-    const end = polarToCartesian(x, y, radius, startAngle);
-    const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-    return ["M", x, y, "L", start.x, start.y, "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y, "Z"].join(" ");
-  };
-
-  return (
-    <svg viewBox="0 0 200 200" className="w-56 h-56">
-      <circle cx="100" cy="100" r="86" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2" />
-      {segments.map((segment, index) => (
-        <path
-          key={index}
-          d={describeArc(100, 100, 86, segment.start, segment.end)}
-          fill={segment.filled ? "#f59e0b" : "#e2e8f0"}
-          stroke="#ffffff"
-          strokeWidth="2"
-        />
-      ))}
-      <circle cx="100" cy="100" r="4" fill="#475569" />
-    </svg>
-  );
-}
-
-function runInlineTests() {
-  const tests = [
-    {
-      name: "5/10 vereenvoudigt naar 1/2",
-      pass: simplifyFraction(5, 10).simplifiedLabel === "1/2",
-    },
-    {
-      name: "4/4 blijft een hele",
-      pass: simplifyFraction(4, 4).simplifiedLabel === "1/1",
-    },
-    {
-      name: "3/7 blijft 3/7",
-      pass: simplifyFraction(3, 7).simplifiedLabel === "3/7",
-    },
-    {
-      name: "parse van 6/8 wordt 3/4",
-      pass: parseFractionLabel("6/8").simplifiedLabel === "3/4",
-    },
-    {
-      name: "5/10 is 50%",
-      pass: fractionToPercentage(5, 10) === "50%",
-    },
-    {
-      name: "1/4 is 25%",
-      pass: fractionToPercentage(1, 4) === "25%",
-    },
-    {
-      name: "1/8 is 12.5%",
-      pass: fractionToPercentage(1, 8) === "12.5%",
-    },
-  ];
-
-  tests.forEach((test) => {
-    if (!test.pass) {
-      console.error(`Test mislukt: ${test.name}`);
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Breuken App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f7fb;
+      text-align: center;
+      padding: 30px;
     }
-  });
-}
 
-runInlineTests();
+    h1 {
+      color: #1f4e79;
+    }
 
-export default function BreukenRekenApp() {
-  const [selectedBase, setSelectedBase] = useState(0);
-  const [selectedNumerator, setSelectedNumerator] = useState(1);
-  const [quiz, setQuiz] = useState(randomQuestion());
-  const [feedback, setFeedback] = useState("");
-  const [score, setScore] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [customAnswer, setCustomAnswer] = useState("");
+    .app {
+      background: white;
+      max-width: 700px;
+      margin: auto;
+      padding: 25px;
+      border-radius: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    }
 
-  const currentBase = baseFractions[selectedBase];
+    select, button {
+      font-size: 18px;
+      padding: 10px;
+      margin: 10px;
+      border-radius: 8px;
+    }
 
-  const current = useMemo(() => {
-    const numerator = Math.min(selectedNumerator, currentBase.denominator);
-    const simplified = simplifyFraction(numerator, currentBase.denominator);
-    const label = `${numerator}/${currentBase.denominator}`;
-    const percentageLabel = fractionToPercentage(numerator, currentBase.denominator);
+    .fraction {
+      font-size: 40px;
+      font-weight: bold;
+      margin: 20px;
+      color: #d97706;
+    }
 
-    return {
-      numerator,
-      denominator: currentBase.denominator,
-      label,
-      simplifiedLabel: simplified.simplifiedLabel,
-      isEquivalent: simplified.isEquivalent,
-      explanation: explanationForFraction({
-        numerator,
-        denominator: currentBase.denominator,
-        label,
-        simplifiedLabel: simplified.simplifiedLabel,
-        isEquivalent: simplified.isEquivalent,
-      }),
-      percentageLabel,
-    };
-  }, [currentBase.denominator, selectedNumerator]);
+    .bar {
+      display: flex;
+      width: 500px;
+      height: 60px;
+      margin: 25px auto;
+      border: 3px solid #333;
+      border-radius: 10px;
+      overflow: hidden;
+    }
 
-  const progress = ((selectedBase + 1) / baseFractions.length) * 100;
-  const numeratorButtons = Array.from({ length: currentBase.denominator }, (_, i) => i + 1);
+    .part {
+      flex: 1;
+      border-right: 1px solid #333;
+      background: #e5e7eb;
+    }
 
-  const safeChoices = useMemo(() => {
-    const filled = [...quiz.choices];
+    .part:last-child {
+      border-right: none;
+    }
 
-    while (filled.length < 4) {
-      const extra = randomFraction().label;
-      if (!filled.includes(extra) && parseFractionLabel(extra).simplifiedLabel !== quiz.equivalent) {
-        filled.push(extra);
+    .filled {
+      background: #f59e0b;
+    }
+
+    .circle {
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      margin: 25px auto;
+      background: conic-gradient(#f59e0b 0deg, #e5e7eb 0deg);
+      border: 3px solid #333;
+    }
+
+    .explanation {
+      font-size: 22px;
+      margin-top: 20px;
+      color: #333;
+    }
+
+    .small {
+      color: #666;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app">
+    <h1>Breuken App</h1>
+    <p class="small">Created by Huisman-AI</p>
+
+    <label>Kies de teller:</label>
+    <select id="numerator"></select>
+
+    <label>Kies de noemer:</label>
+    <select id="denominator"></select>
+
+    <button onclick="showFraction()">Laat breuk zien</button>
+
+    <div class="fraction" id="fractionText">1/2</div>
+
+    <div class="bar" id="bar"></div>
+
+    <div class="circle" id="circle"></div>
+
+    <div class="explanation" id="explanation"></div>
+  </div>
+
+  <script>
+    const numeratorSelect = document.getElementById("numerator");
+    const denominatorSelect = document.getElementById("denominator");
+
+    for (let i = 1; i <= 10; i++) {
+      numeratorSelect.innerHTML += `<option value="${i}">${i}</option>`;
+      denominatorSelect.innerHTML += `<option value="${i}">${i}</option>`;
+    }
+
+    numeratorSelect.value = 1;
+    denominatorSelect.value = 2;
+
+    function gcd(a, b) {
+      while (b !== 0) {
+        let temp = b;
+        b = a % b;
+        a = temp;
       }
+      return a;
     }
 
-    return shuffle(filled).slice(0, 4);
-  }, [quiz]);
+    function showFraction() {
+      let numerator = parseInt(numeratorSelect.value);
+      let denominator = parseInt(denominatorSelect.value);
 
-  const answerQuiz = (choice) => {
-    const cleanedChoice = choice.replace(/\s/g, "");
-    const isCorrect = cleanedChoice === quiz.correct || cleanedChoice === quiz.equivalent;
+      if (numerator > denominator) {
+        document.getElementById("explanation").innerHTML =
+          "De teller mag in deze oefening niet groter zijn dan de noemer.";
+        return;
+      }
 
-    if (isCorrect) {
-      setFeedback(
-        quiz.correct === quiz.equivalent
-          ? `Goed gedaan! ${quiz.correct} is juist.`
-          : `Goed gedaan! ${quiz.correct} is hetzelfde als ${quiz.equivalent}.`
-      );
-      setScore((value) => value + 1);
-      setStreak((value) => value + 1);
-      return;
+      document.getElementById("fractionText").innerText =
+        numerator + "/" + denominator;
+
+      const bar = document.getElementById("bar");
+      bar.innerHTML = "";
+
+      for (let i = 1; i <= denominator; i++) {
+        const part = document.createElement("div");
+        part.className = "part";
+        if (i <= numerator) {
+          part.classList.add("filled");
+        }
+        bar.appendChild(part);
+      }
+
+      const percentage = numerator / denominator;
+      const degrees = percentage * 360;
+
+      document.getElementById("circle").style.background =
+        `conic-gradient(#f59e0b 0deg ${degrees}deg, #e5e7eb ${degrees}deg 360deg)`;
+
+      const divisor = gcd(numerator, denominator);
+      const simpleNumerator = numerator / divisor;
+      const simpleDenominator = denominator / divisor;
+
+      let explanation = `Je ziet hier ${numerator} van de ${denominator} gelijke delen.`;
+
+      if (divisor > 1) {
+        explanation += `<br>Deze breuk kun je vereenvoudigen naar 
+        <strong>${simpleNumerator}/${simpleDenominator}</strong>.`;
+      } else {
+        explanation += `<br>Deze breuk is al zo eenvoudig mogelijk.`;
+      }
+
+      if (numerator === denominator) {
+        explanation += `<br><strong>${numerator}/${denominator} is hetzelfde als 1 geheel.</strong>`;
+      }
+
+      document.getElementById("explanation").innerHTML = explanation;
     }
 
-    setFeedback(
-      quiz.correct === quiz.equivalent
-        ? `Nog niet goed. Het juiste antwoord is ${quiz.correct}.`
-        : `Nog niet goed. Het juiste antwoord is ${quiz.correct}. Dat is hetzelfde als ${quiz.equivalent}.`
-    );
-    setStreak(0);
-  };
+    showFraction();
+  </script>
 
-  const nextQuiz = () => {
-    setQuiz(randomQuestion());
-    setFeedback("");
-    setCustomAnswer("");
-  };
-
-  const checkTypedAnswer = () => {
-    const cleaned = customAnswer.replace(/\s/g, "");
-    const isCorrect = cleaned === quiz.correct || cleaned === quiz.equivalent;
-
-    if (isCorrect) {
-      setFeedback(
-        quiz.correct === quiz.equivalent
-          ? `Top! Jij hebt ${cleaned} goed ingevuld.`
-          : `Top! ${cleaned} is goed. ${quiz.correct} is hetzelfde als ${quiz.equivalent}.`
-      );
-      setScore((value) => value + 1);
-      setStreak((value) => value + 1);
-      return;
-    }
-
-    setFeedback(
-      quiz.correct === quiz.equivalent
-        ? `Bijna. Kijk nog eens goed. Het juiste antwoord is ${quiz.correct}.`
-        : `Bijna. Kijk nog eens goed. Het juiste antwoord is ${quiz.correct}. Dat is hetzelfde als ${quiz.equivalent}.`
-    );
-    setStreak(0);
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-emerald-50 p-4 md:p-8">
-      <div className="text-center mb-4 text-sm text-slate-500">Created by Huisman-AI</div>
-
-      <div className="max-w-7xl mx-auto grid gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="grid md:grid-cols-[1.2fr_0.8fr] gap-6"
-        >
-          <Card className="rounded-3xl shadow-xl border-0">
-            <CardHeader className="pb-2">
-              <div className="flex flex-wrap items-center gap-3 justify-between">
-                <div>
-                  <CardTitle className="text-3xl md:text-4xl font-bold text-slate-800">
-                    Breuken leren met plaatjes
-                  </CardTitle>
-                  <p className="text-slate-600 mt-2 text-base md:text-lg">
-                    Van <strong>1/1</strong> tot <strong>10/10</strong>. Kijk, vergelijk en leer ook dat sommige breuken hetzelfde zijn.
-                  </p>
-                </div>
-                <Badge className="text-base px-4 py-2 rounded-full bg-amber-100 text-amber-800 hover:bg-amber-100">
-                  Makkelijk en duidelijk
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-6">
-              <div>
-                <div className="flex justify-between text-sm text-slate-600 mb-2">
-                  <span>Voortgang noemers</span>
-                  <span>
-                    {selectedBase + 1} van {baseFractions.length}
-                  </span>
-                </div>
-                <Progress value={progress} className="h-3" />
-              </div>
-
-              <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-6 items-center">
-                <div className="bg-slate-50 rounded-3xl p-5 border border-slate-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-4xl font-bold text-slate-800">{current.label}</h2>
-                    <Star className="w-7 h-7 text-amber-500" />
-                  </div>
-
-                  <p className="text-slate-700 text-lg leading-relaxed">{current.explanation}</p>
-
-                  <div className="mt-4 rounded-2xl bg-white border border-slate-200 p-4 space-y-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-500 mb-1">Zelfde waarde</p>
-                      <p className="text-2xl font-bold text-slate-800">
-                        {current.label} = {current.simplifiedLabel}
-                      </p>
-                      <p className="text-slate-600 mt-2">
-                        {current.isEquivalent
-                          ? `Deze breuk kan je kleiner maken. ${current.label} en ${current.simplifiedLabel} betekenen evenveel.`
-                          : "Deze breuk is al zo klein mogelijk."}
-                      </p>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-200">
-                      <p className="text-sm font-medium text-slate-500 mb-1">Percentage</p>
-                      <p className="text-2xl font-bold text-slate-800">{current.percentageLabel}</p>
-                      <p className="text-slate-600 mt-2">
-                        {current.label} is hetzelfde als <strong>{current.percentageLabel}</strong>.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 space-y-4">
-                    <div>
-                      <p className="text-sm font-medium text-slate-500 mb-2">Balk</p>
-                      <FractionBar denominator={current.denominator} numerator={current.numerator} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-500 mb-2">Rondjes</p>
-                      <FractionCircles denominator={current.denominator} numerator={current.numerator} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-3xl p-5 border border-slate-200 flex flex-col items-center justify-center">
-                  <p className="text-sm font-medium text-slate-500 mb-3">Taart / pizza voorbeeld</p>
-                  <PizzaVisual denominator={current.denominator} numerator={current.numerator} />
-                  <p className="text-slate-700 text-center text-lg mt-4 max-w-md">
-                    Hier zie je dat <strong>{current.label}</strong> hetzelfde deel laat zien als <strong>{current.simplifiedLabel}</strong>.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-emerald-50 rounded-3xl p-5 border border-emerald-100 space-y-5">
-                <div>
-                  <h3 className="text-xl font-semibold text-slate-800">Kies eerst de noemer</h3>
-                  <p className="text-slate-600">Zo kies je in hoeveel gelijke stukjes het geheel verdeeld is.</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {baseFractions.map((fraction, index) => (
-                    <Button
-                      key={fraction.label}
-                      variant={index === selectedBase ? "default" : "outline"}
-                      className="rounded-2xl"
-                      onClick={() => {
-                        setSelectedBase(index);
-                        setSelectedNumerator((prev) => Math.min(prev, fraction.denominator));
-                      }}
-                    >
-                      {fraction.label}
-                    </Button>
-                  ))}
-                </div>
-
-                <div>
-                  <h3 className="text-xl font-semibold text-slate-800">Kies daarna de teller</h3>
-                  <p className="text-slate-600">Zo kies je hoeveel stukjes gekleurd zijn.</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {numeratorButtons.map((number) => (
-                    <Button
-                      key={number}
-                      variant={number === current.numerator ? "default" : "outline"}
-                      className="rounded-2xl min-w-[56px]"
-                      onClick={() => setSelectedNumerator(number)}
-                    >
-                      {number}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl shadow-xl border-0">
-            <CardHeader>
-              <CardTitle className="text-2xl font-bold text-slate-800">Oefenen</CardTitle>
-              <p className="text-slate-600">
-                Kijk naar het plaatje. Je mag de breuk kiezen of een gelijkwaardige breuk invullen.
-              </p>
-            </CardHeader>
-
-            <CardContent className="space-y-5">
-              <div className="bg-slate-50 rounded-3xl p-5 border border-slate-200 flex flex-col items-center gap-4">
-                <FractionBar denominator={quiz.denominator} numerator={quiz.numerator} />
-                <FractionCircles denominator={quiz.denominator} numerator={quiz.numerator} />
-                <PizzaVisual denominator={quiz.denominator} numerator={quiz.numerator} />
-              </div>
-
-              <div className="rounded-3xl bg-amber-50 border border-amber-100 p-4 space-y-2">
-                <div>
-                  <p className="text-sm text-slate-600">Hint</p>
-                  <p className="text-slate-800 text-lg">
-                    Er zijn <strong>{quiz.denominator}</strong> gelijke stukjes en <strong>{quiz.numerator}</strong> stukjes zijn gekleurd.
-                  </p>
-                </div>
-                <div className="pt-2 border-t border-amber-200">
-                  <p className="text-sm text-slate-600">Percentage</p>
-                  <p className="text-slate-800 text-lg font-semibold">
-                    {quiz.correct} = {fractionToPercentage(quiz.numerator, quiz.denominator)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                {safeChoices.map((choice) => (
-                  <Button
-                    key={choice}
-                    variant="outline"
-                    className="h-14 text-lg rounded-2xl"
-                    onClick={() => answerQuiz(choice)}
-                  >
-                    {choice}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="space-y-3 bg-sky-50 border border-sky-100 rounded-3xl p-4">
-                <label className="text-sm font-medium text-slate-700">Of typ zelf het antwoord</label>
-                <div className="flex gap-2">
-                  <Input
-                    value={customAnswer}
-                    onChange={(event) => setCustomAnswer(event.target.value)}
-                    placeholder="Bijvoorbeeld: 5/10 of 1/2"
-                    className="rounded-2xl h-12 text-lg"
-                  />
-                  <Button className="rounded-2xl h-12" onClick={checkTypedAnswer}>
-                    Check
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-emerald-50 rounded-3xl p-4 border border-emerald-100">
-                  <p className="text-sm text-slate-600">Score</p>
-                  <p className="text-3xl font-bold text-slate-800">{score}</p>
-                </div>
-                <div className="bg-amber-50 rounded-3xl p-4 border border-amber-100">
-                  <p className="text-sm text-slate-600">Reeks goed</p>
-                  <p className="text-3xl font-bold text-slate-800">{streak}</p>
-                </div>
-              </div>
-
-              <div className="min-h-[72px] rounded-3xl p-4 border bg-white flex items-center gap-3">
-                {feedback ? (
-                  <>
-                    <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-                    <p className="text-slate-700">{feedback}</p>
-                  </>
-                ) : (
-                  <>
-                    <CircleHelp className="w-6 h-6 text-sky-600" />
-                    <p className="text-slate-700">
-                      Tip: sommige breuken zijn hetzelfde. Bijvoorbeeld 5/10 is hetzelfde als 1/2.
-                    </p>
-                  </>
-                )}
-              </div>
-
-              <Button onClick={nextQuiz} className="w-full h-12 rounded-2xl text-base">
-                <RefreshCcw className="w-4 h-4 mr-2" />
-                Nieuwe oefening
-              </Button>
-
-              <Button variant="outline" onClick={() => setQuiz(randomQuestion())} className="w-full h-12 rounded-2xl text-base">
-                <Shuffle className="w-4 h-4 mr-2" />
-                Willekeurige breuk
-              </Button>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <Card className="rounded-3xl shadow-lg border-0">
-          <CardContent className="p-6">
-            <h3 className="text-2xl font-bold text-slate-800 mb-4">Uitleg voor leerlingen</h3>
-            <div className="grid md:grid-cols-4 gap-4 text-slate-700">
-              <div className="bg-slate-50 rounded-3xl p-4 border border-slate-200">
-                <p className="font-semibold mb-2">1. Kijk naar de stukjes</p>
-                <p>Een breuk laat zien in hoeveel gelijke stukjes iets is verdeeld.</p>
-              </div>
-              <div className="bg-slate-50 rounded-3xl p-4 border border-slate-200">
-                <p className="font-semibold mb-2">2. Kijk naar het gekleurde deel</p>
-                <p>De teller zegt hoeveel stukjes gekleurd zijn.</p>
-              </div>
-              <div className="bg-slate-50 rounded-3xl p-4 border border-slate-200">
-                <p className="font-semibold mb-2">3. Kijk naar alle stukjes</p>
-                <p>De noemer zegt uit hoeveel gelijke stukjes het geheel bestaat.</p>
-              </div>
-              <div className="bg-slate-50 rounded-3xl p-4 border border-slate-200">
-                <p className="font-semibold mb-2">4. Leer gelijke breuken</p>
-                <p>5/10 en 1/2 zien er anders uit, maar betekenen evenveel.</p>
-              </div>
-            </div>
-
-            <div className="mt-4 bg-sky-50 rounded-3xl p-4 border border-sky-100 text-slate-700">
-              <p className="font-semibold mb-2">Breuk en procent horen bij elkaar</p>
-              <p>
-                Een breuk kun je ook als procent schrijven. Bijvoorbeeld: <strong>1/2 = 50%</strong>, <strong>1/4 = 25%</strong> en <strong>3/4 = 75%</strong>.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
+</body>
+</html>
